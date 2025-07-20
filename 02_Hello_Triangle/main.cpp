@@ -1,5 +1,5 @@
 #include "../glad/include/glad/glad.h"
-#include <GL/gl.h>
+#include <GL/glext.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
 
@@ -48,20 +48,38 @@ int main(){
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
     // VERTEX SHADER
+    // float vertices[] = {
+    //     -0.5f, -0.5f, 0.0f,
+    //      0.5f, -0.5f, 0.0f,
+    //      0.0f,  0.5f, 0.0f
+    // }; 
+
     float vertices[] = {
-        -0.5f, -0.5f, 0.0f,
-         0.5f, -0.5f, 0.0f,
-         0.0f,  0.5f, 0.0f
+         -0.5f, 0.5f, 0.0f,  // TL
+         0.5f, 0.5f, 0.0f,   // TR
+         0.5f,  -0.5f, 0.0f, // BR
+         -0.5f,  -0.5f, 0.0f,// BL
     }; 
 
-    unsigned int VBO, VAO;
+    unsigned int indices[]= {
+        0, 1, 2,
+        0, 3, 2
+    };
+
+    unsigned int VBO, VAO, EBO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
 
     glBindVertexArray(VAO);
 
+    // for vertex data
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    // for indices
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
     unsigned int vertexShader;
     vertexShader=glCreateShader(GL_VERTEX_SHADER);
@@ -110,9 +128,12 @@ int main(){
         glClear(GL_COLOR_BUFFER_BIT);
 
         glUseProgram(shaderProgram);
-        glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
 
+        glBindVertexArray(VAO);
+
+        // glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
