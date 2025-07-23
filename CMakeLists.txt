@@ -4,7 +4,7 @@ project(OpenGL_Project)
 set(CMAKE_CXX_STANDARD 17)
 
 # Add glad
-add_subdirectory(glad)
+add_subdirectory(include/glad)
 
 # Include GLFW (assumes installed via system or package manager)
 find_package(glfw3 REQUIRED)
@@ -14,7 +14,9 @@ add_executable(main main.cpp)
 # Glad includes
 target_include_directories(main
     PRIVATE
-    glad/include
+    include/glad/include
+    include/stb_image.h
+
 )
 
 # Link GLAD + GLFW + OpenGL
