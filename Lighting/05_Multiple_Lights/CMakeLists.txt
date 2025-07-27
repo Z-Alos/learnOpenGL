@@ -1,0 +1,33 @@
+cmake_minimum_required(VERSION 3.10)
+project(Project)
+
+# Add glad manually from the top-level folder
+add_library(glad STATIC
+    ${CMAKE_SOURCE_DIR}/../../include/glad/src/glad.c
+)
+
+target_include_directories(glad PUBLIC
+    ${CMAKE_SOURCE_DIR}/../glad/include
+)
+
+# Now the actual app
+add_executable(main main.cpp)
+
+target_include_directories(main PRIVATE
+    ${CMAKE_SOURCE_DIR}/../../include/glad/include
+    ${CMAKE_SOURCE_DIR}/../../include/
+)
+
+target_link_libraries(main PRIVATE glad glfw)
+
+# Copy shaders to build directory
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/colors.vs DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/colors.fs DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/light_cube.vs DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/light_cube.fs DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+# Textures
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/container2.png DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/container2_specular.png DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+
