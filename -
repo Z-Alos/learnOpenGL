@@ -86,12 +86,11 @@ int main(){
 
     // Build & Compile Shaders
     Shader shader("../shader.vert", "../shader.frag", "../geometry.gs");
-    Shader normalShader("../normalShader.vert", "../normalShader.frag", "../normalShader.gs");
 
     // Model
-    Model* backpack = nullptr;
+    Model* rocket_engine = nullptr;
     try {
-        backpack = new Model("../../../res/models/backpack/backpack.obj");
+        rocket_engine = new Model("../../../res/models/rocket_engine/scene.gltf");
         std::cout << "Model loaded successfully!" << std::endl;
     } catch (const std::exception& e) {
         std::cout << "Model loading failed: " << e.what() << std::endl;
@@ -125,16 +124,8 @@ int main(){
         shader.setMat4("model", model);
         shader.setFloat("time", static_cast<float>(glfwGetTime()));
 
-        backpack->Draw(shader);
+        rocket_engine->Draw(shader);
 
-        normalShader.use();
-        normalShader.setMat4("projection", projection);
-        normalShader.setMat4("view", view);
-        normalShader.setMat4("model", model);
-        normalShader.setFloat("time", static_cast<float>(glfwGetTime()));
-
-        backpack->Draw(normalShader);
-        
         // glBindVertexArray(VAO);
         // glDrawArrays(GL_POINTS, 0, 4);
                               
