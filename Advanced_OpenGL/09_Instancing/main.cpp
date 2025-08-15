@@ -153,7 +153,7 @@ int main(){
     //     shader.setVec2(("offsets[" + std::to_string(i) + "]"), translations[i]);
     // }
     
-    unsigned int amount = 40000;
+    unsigned int amount = 2000;
     glm::mat4 * modelMatrices;
     modelMatrices = new glm::mat4[amount];
     srand(glfwGetTime()); // seed

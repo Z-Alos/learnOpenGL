@@ -30,8 +30,8 @@ void renderQuad();
 
 // GLOBAL VARIABLES
 // Screen Settings
-const unsigned int SCR_WIDTH=800;
-const unsigned int SCR_HEIGHT=600;
+const unsigned int SCR_WIDTH=1080;
+const unsigned int SCR_HEIGHT=720;
 
 // Camera
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f)); // arg: cameraPos
@@ -48,8 +48,6 @@ bool blinn = false;
 bool blinnKeyPressed = false;
 bool gaama = false;
 bool gaamaKeyPressed = false;
-
-glm::vec3 lightPos(0.0f, 1.0f, 2.0f);
 
 // meshes
 unsigned int planeVAO;
@@ -120,8 +118,10 @@ int main(){
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    float borderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
 
     glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
@@ -130,14 +130,16 @@ int main(){
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // Build & Compile Shaders
+    Shader shader("../shader.vert", "../shader.frag");
     Shader depthShader("../depth_map.vert", "../depth_map.frag");
     Shader debugDepthQuad("../debug_quad.vert", "../debug_quad.frag");
 
-    // Shader lightingShader("../shader.vert", "../shader.frag");
-    // Shader lightCubeShader("../light_cube.vs", "../light_cube.fs");
 
     unsigned int woodTexture= loadTexture("../../../../res/textures/wooden_floor.png", true);
 
+    shader.use();
+    shader.setInt("diffuseTexture", 0);
+    shader.setInt("shadowMap", 1);
     debugDepthQuad.use();
     debugDepthQuad.setInt("depthMap", 0);
 
@@ -145,9 +147,11 @@ int main(){
     // lightingShader.setInt("material.diffuse", 0);
     // lightingShader.setInt("material.specular", 0);
 
-    glEnable(GL_DEPTH_TEST);
+    glm::vec3 lightPos(-2.0f, 4.0f, -1.0f);
 
-    float near_plane = 1.0f, far_plane = 7.5f;
+    glEnable(GL_DEPTH_TEST);
+    // glEnable(GL_CULL_FACE);
+
     // RENDER LOOP
     while(!glfwWindowShouldClose(window)){
         // Delta Time
@@ -162,10 +166,9 @@ int main(){
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // Render Shadow Map
+        float near_plane = 1.0f, far_plane = 7.5f;
         glm::mat4 lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
-        glm::mat4 lightView = glm::lookAt(glm::vec3(-2.0f, 4.0f, -1.0f), 
-                                  glm::vec3( 0.0f, 0.0f,  0.0f), 
-                                  glm::vec3( 0.0f, 1.0f,  0.0f));  
+        glm::mat4 lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3( 0.0f, 1.0f,  0.0f));  
         glm::mat4 lightSpaceMatrix = lightProjection * lightView;
 
         depthShader.use();
@@ -174,9 +177,11 @@ int main(){
         glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
         glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
             glClear(GL_DEPTH_BUFFER_BIT);
-            glActiveTexture(GL_TEXTURE_2D);
+            glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, woodTexture);
+            // glCullFace(GL_FRONT);
             renderScene(depthShader);
+            // glCullFace(GL_BACK);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         // Render Scene
@@ -188,6 +193,26 @@ int main(){
         else 
             glDisable(GL_FRAMEBUFFER_SRGB);
 
+        shader.use();
+
+        if(blinn)
+            shader.setBool("blinn", true);
+        else shader.setBool("blinn", false);
+
+        glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
+        glm::mat4 view = camera.GetViewMatrix();
+        shader.setMat4("projection", projection);
+        shader.setMat4("view", view);
+        // set light uniforms
+        shader.setVec3("viewPos", camera.Position);
+        shader.setVec3("lightPos", lightPos);
+        shader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, woodTexture);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, depthMap);
+        renderScene(shader);
+
         debugDepthQuad.use();
         debugDepthQuad.setFloat("near_plane", near_plane);
         debugDepthQuad.setFloat("far_plane", far_plane);
@@ -195,54 +220,7 @@ int main(){
         glBindTexture(GL_TEXTURE_2D, depthMap);
         renderQuad();
         
-        // lightingShader.use();
-        // lightingShader.setVec3("light.position", lightPos);
-        // lightingShader.setVec3("viewPos", camera.Position);
-        //
-        // // light properties
-        // lightingShader.setVec3("light.ambient", 0.4f, 0.4f, 0.2f);
-        // lightingShader.setVec3("light.diffuse", 0.5f, 0.5f, 0.5f);
-        // lightingShader.setVec3("light.specular", 1.0f, 1.0f, 1.0f);
-        //
-        // // material properties
-        // lightingShader.setVec3("material.specular", 0.5f, 0.5f, 0.5f);
-        // // lightingShader.setVec3("material.specular", 1.0f, 1.0f, 1.0f);
-        // lightingShader.setFloat("material.shininess", 64.0f);
-        // if(blinn)
-        //     lightingShader.setFloat("material.shininess", 64.0f);
-        //
-        // // blinn phong
-        // lightingShader.setBool("blinn", blinn);
-
-        // glActiveTexture(GL_TEXTURE0);
-        // glBindTexture(GL_TEXTURE_2D, diffuseMap);
-
-        // // view/projection transformation
-        // glm::mat4 projection=glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH/(float)SCR_HEIGHT, 0.1f, 100.0f);
-        // glm::mat4 view=camera.GetViewMatrix();
-        // lightingShader.setMat4("projection", projection);
-        // lightingShader.setMat4("view", view);
-        //
-        // glm::mat4 model = glm::mat4(1.0f);
-        // model = glm::translate(model, glm::vec3(0.0, -1.0, 0.0));
-        // model = glm::scale(model, glm::vec3(10.0, 0.01, 10.0));
-        // lightingShader.setMat4("model", model);
-        //
-        // // render the cube
-        // glBindVertexArray(cubeVAO);
-        // glDrawArrays(GL_TRIANGLES, 0, 36);
-        //
-        // // render light source
-        // lightCubeShader.use();
-        // lightCubeShader.setMat4("projection", projection);
-        // lightCubeShader.setMat4("view", view);
-        // model = glm::mat4(1.0f);
-        // model = glm::translate(model, lightPos);
-        // model = glm::scale(model, glm::vec3(0.2f));
-        // lightCubeShader.setMat4("model", model);
-        //
-        // std::cout << (blinn ? "Blinn-Phong" : "Phong") << " " << (gaama ? "with Gaama Correction" : "without Gaama Correction") << std::endl;
-        //
+        std::cout << (blinn ? "Blinn-Phong" : "Phong") << " " << (gaama ? "with Gaama Correction" : "without Gaama Correction") << std::endl;
         // glBindVertexArray(lightCubeVAO);
         // glDrawArrays(GL_TRIANGLES, 0, 36);
 
@@ -363,12 +341,19 @@ void renderQuad()
 {
     if (quadVAO == 0)
     {
+        // float quadVertices[] = {
+        //     // positions        // texture Coords
+        //     -1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+        //     -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+        //      1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
+        //      1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+        // };
         float quadVertices[] = {
             // positions        // texture Coords
-            -1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
-            -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+            0.5f,  1.0f, 0.0f, 0.0f, 1.0f,
+            0.5f, 0.5f, 0.0f, 0.0f, 0.0f,
              1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
-             1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+             1.0f, 0.5f, 0.0f, 1.0f, 0.0f,
         };
         // setup plane VAO
         glGenVertexArrays(1, &quadVAO);
