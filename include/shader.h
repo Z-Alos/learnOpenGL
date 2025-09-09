@@ -17,18 +17,27 @@ public:
 
     // constructor reads and build the shader
     // read shader code
-    Shader(const char* vertexPath, const char* fragmentPath, const char* geometryPath = nullptr){
+    Shader(const char* vertexPath, const char* fragmentPath,
+            const char* geometryPath = nullptr, const char* tessControlPath = nullptr,
+            const char* tessEvalPath = nullptr)
+    {
         std::string vertexCode;
         std::string fragmentCode;
         std::string geometryCode;
+        std::string tessControlCode;
+        std::string tessEvalCode;
         std::ifstream vShaderFile;
         std::ifstream fShaderFile;
         std::ifstream gShaderFile;
+        std::ifstream tcShaderFile;
+        std::ifstream teShaderFile;
 
         // handle exceptions
         vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
         fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
         gShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        tcShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        teShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
 
         try{
             vShaderFile.open(vertexPath);
@@ -54,12 +63,20 @@ public:
             fragmentCode=fShaderStream.str();
 
             // Load Geometry Shader
-            if(geometryPath != nullptr){
-                gShaderFile.open(geometryPath);
-                std::stringstream gShaderStream;
-                gShaderStream << gShaderFile.rdbuf();
-                gShaderFile.close();
-                geometryCode = gShaderStream.str();
+            if(tessControlPath != nullptr) {
+                tcShaderFile.open(tessControlPath);
+                std::stringstream tcShaderStream;
+                tcShaderStream << tcShaderFile.rdbuf();
+                tcShaderFile.close();
+                tessControlCode = tcShaderStream.str();
+            }
+
+            if(tessEvalPath != nullptr) {
+                teShaderFile.open(tessEvalPath);
+                std::stringstream teShaderStream;
+                teShaderStream << teShaderFile.rdbuf();
+                teShaderFile.close();
+                tessEvalCode = teShaderStream.str();
             }
         }
         catch(std::ifstream::failure e){
@@ -69,34 +86,21 @@ public:
         const char* vShaderCode=vertexCode.c_str();
         const char* fShaderCode=fragmentCode.c_str();
 
-
         // COMPILE SHADERS
         unsigned int vertex, fragment;
-        int success;
-        char infoLog[512];
-
         // vertex Shader
         vertex=glCreateShader(GL_VERTEX_SHADER);
         glShaderSource(vertex, 1, &vShaderCode, NULL);
         glCompileShader(vertex);
 
-        // check for compile errors
-        glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
-        if(!success){
-            glGetShaderInfoLog(vertex, 512, NULL, infoLog);
-            std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-        }
-        
+        checkCompileErrors(vertex, "VERTEX");        
+
         // fragment Shader
         fragment=glCreateShader(GL_FRAGMENT_SHADER);
         glShaderSource(fragment, 1, &fShaderCode, NULL);
         glCompileShader(fragment);
 
-        glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
-        if(!success){
-            glGetShaderInfoLog(fragment, 512, NULL, infoLog);
-            std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
-        }
+        checkCompileErrors(fragment, "FRAGMENT");        
 
         // geometry shader (if passed)
         unsigned int geometry;
@@ -105,33 +109,50 @@ public:
             geometry = glCreateShader(GL_GEOMETRY_SHADER);
             glShaderSource(geometry, 1, &gShaderCode, NULL);
             glCompileShader(geometry);
-
-            glGetShaderiv(geometry, GL_COMPILE_STATUS, &success);
-            if(!success){
-                glGetShaderInfoLog(geometry, 512, NULL, infoLog);
-                std::cout << "ERROR::SHADER::GEOMETRY::COMPILATION_FAILED\n" << infoLog << std::endl;
-            }
+            checkCompileErrors(geometry, "GEOMETRY");
         }
 
-        // shader Program
+        // tssellation shader (if passed)
+        unsigned int tessControl;
+        if(tessControlPath != nullptr){
+            const char* tcShaderCode = tessControlCode.c_str();
+            tessControl = glCreateShader(GL_TESS_CONTROL_SHADER);
+            glShaderSource(tessControl, 1, &tcShaderCode, NULL);
+            glCompileShader(tessControl);
+            checkCompileErrors(tessControl, "TESS_CONTROL");
+        }
+
+        unsigned int tessEval;
+        if(tessEvalPath != nullptr){
+            const char* teShaderCode = tessEvalCode.c_str();
+            tessEval = glCreateShader(GL_TESS_EVALUATION_SHADER);
+            glShaderSource(tessEval, 1, &teShaderCode, NULL);
+            glCompileShader(tessEval);
+            checkCompileErrors(tessEval, "TESS_EVALUATION");
+        }
+
+        // Shader Program
         ID=glCreateProgram();
         glAttachShader(ID, vertex);
         glAttachShader(ID, fragment);
         if(geometryPath != nullptr)
             glAttachShader(ID, geometry);
-        glLinkProgram(ID);
+        if(tessControlPath != nullptr)
+            glAttachShader(ID, tessControl);
+        if(tessEvalPath != nullptr)
+            glAttachShader(ID, tessEval);
 
-        // print linking errors
-        glGetProgramiv(ID, GL_LINK_STATUS, &success);
-        if(!success){
-            glGetProgramInfoLog(ID, 512, NULL, infoLog);
-            std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
-        }
+        glLinkProgram(ID);
+        checkCompileErrors(ID, "PROGRAM");
 
         glDeleteShader(vertex);
         glDeleteShader(fragment);
         if(geometryPath != nullptr)
             glDeleteShader(geometry);
+        if(tessControlPath != nullptr)
+            glDeleteShader(tessControl);
+        if(tessEvalPath != nullptr)
+            glDeleteShader(tessEval);
     }
     
     // activate the shader
@@ -172,6 +193,31 @@ public:
     // Matrix
     void setMat4(const std::string &name, const glm::mat4 &mat) const{
         glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, &mat[0][0]);
+    }
+
+private:
+    void checkCompileErrors(GLuint shader, std::string type)
+    {
+        GLint success;
+        GLchar infoLog[1024];
+        if(type != "PROGRAM")
+        {
+            glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+            if(!success)
+            {
+                glGetShaderInfoLog(shader, 1024, NULL, infoLog);
+                std::cout << "ERROR::SHADER_COMPILATION_ERROR of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
+            }
+        }
+        else
+        {
+            glGetProgramiv(shader, GL_LINK_STATUS, &success);
+            if(!success)
+            {
+                glGetProgramInfoLog(shader, 1024, NULL, infoLog);
+                std::cout << "ERROR::PROGRAM_LINKING_ERROR of type: " << type << "\n" << infoLog << "\n -- --------------------------------------------------- -- " << std::endl;
+            }
+        }
     }
 };
 
