@@ -4,7 +4,6 @@
 #include "../include/glad/include/glad/glad.h"
 #include "../include/glm/glm.hpp"
 
-#include <cstddef>
 #include <string>
 #include <fstream>
 #include <sstream>
@@ -63,6 +62,15 @@ public:
             fragmentCode=fShaderStream.str();
 
             // Load Geometry Shader
+            if(geometryPath != nullptr)
+            {
+                gShaderFile.open(geometryPath);
+                std::stringstream gShaderStream;
+                gShaderStream << gShaderFile.rdbuf();
+                gShaderFile.close();
+                geometryCode = gShaderStream.str();
+            }
+
             if(tessControlPath != nullptr) {
                 tcShaderFile.open(tessControlPath);
                 std::stringstream tcShaderStream;
@@ -188,6 +196,15 @@ public:
 
     void setVec3(const std::string &name, float x, float y, float z) const {
         glUniform3f(glGetUniformLocation(ID, name.c_str()), x, y, z);
+    }
+
+        void setVec4(const std::string &name, const glm::vec4 &value) const {
+        glUniform4fv(glGetUniformLocation(ID, name.c_str()), 1, &value[0]); 
+    }
+
+    void setVec4(const std::string &name, float x, float y, float z, float w) const
+    { 
+        glUniform4f(glGetUniformLocation(ID, name.c_str()), x, y, z, w); 
     }
 
     // Matrix
