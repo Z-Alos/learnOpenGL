@@ -4,12 +4,6 @@ layout (vertices=4) out; // patch
 in vec2 TexCoord[];
 out vec2 TextureCoord[];
 
-// in gl_PerVertex{
-//     vec4 gl_Position;
-//     float gl_PointSize;
-//     float gl_ClipDistance[];
-// } gl_in[gl_MaxPatchVertices];
-
 void main () {
     // pass gl_Position & TexCoord
     gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;

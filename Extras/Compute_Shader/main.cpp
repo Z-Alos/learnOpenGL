@@ -1,4 +1,4 @@
-#include "../../../include/glad/include/glad/glad.h"
+#include "../../include/glad/include/glad/glad.h"
 #include <GL/gl.h>
 #include <GLFW/glfw3.h>
 #include <glm/ext/matrix_transform.hpp>
@@ -10,15 +10,16 @@
 
 #ifndef STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
-#include "../../../include/stb_image.h"
+#include "../../include/stb_image.h"
 #endif
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "../../../include/shader.h"
-#include "../../../include/camera.h"
+#include "../../include/shader.h"
+#include "../../include/compute_shader.h"
+#include "../../include/camera.h"
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -117,90 +118,50 @@ int main(){
         -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
     };
 
-    // Build & Compile Shaders
-    Shader tessHeightMapShader("../shader.vert", "../shader.frag", nullptr, "../heightmap.tesc", "../heightmap.tese"); 
+    //----------QUAD VAO----------
+    unsigned int quadVAO, quadVBO;
+    float quadVertices[] = {
+        // positions        // texture Coords
+        -1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+        -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+        1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
+        1.0f, -1.0f, 0.0f, 1.0f, 0.0f
+    };
 
-    // HEIGHTMAP
-    unsigned int texture;
-    glGenTextures(1, &texture);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture); 
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    int width, height, nChannels;
-    unsigned char *data = stbi_load("../../../../res/heightmap/iceland_heightmap.png",
-                                    &width, &height, &nChannels, 0);
-    if (data)
-    {
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-
-        tessHeightMapShader.setInt("heightMap", 0);
-        std::cout << "Loaded heightmap of size " << height << " x " << width << std::endl;
-    }
-    else
-    {
-        std::cout << "Failed to load texture" << std::endl;
-    }
-    stbi_image_free(data);
-
-    // vertex gen 
-    std::vector<float> vertex;
-    unsigned rez = 20;
-    for(unsigned int i=0; i < rez; i++){
-        for(unsigned int j=0; j < rez; j++){
-            vertex.push_back(-width/2.0f + width*i/(float)rez); // v.x
-            vertex.push_back(0.0f); // v.y
-            vertex.push_back(-height/2.0f + height*j/(float)rez); // v.z
-            vertex.push_back(i/(float)rez); // u
-            vertex.push_back(j/(float)rez); // v
-
-            vertex.push_back(-width/2.0f + width*(i+1)/(float)rez); // v.x
-            vertex.push_back(0.0f); // v.y
-            vertex.push_back(-height/2.0f + height*j/(float)rez); // v.z
-            vertex.push_back((i+1) / (float)rez); // u
-            vertex.push_back(j / (float)rez); // v
-
-            vertex.push_back(-width/2.0f + width*i/(float)rez); // v.x
-            vertex.push_back(0.0f); // v.y
-            vertex.push_back(-height/2.0f + height*(j+1)/(float)rez); // v.z
-            vertex.push_back(i / (float)rez); // u
-            vertex.push_back((j+1) / (float)rez); // v
-
-            vertex.push_back(-width/2.0f + width*(i+1)/(float)rez); // v.x
-            vertex.push_back(0.0f); // v.y
-            vertex.push_back(-height/2.0f + height*(j+1)/(float)rez); // v.z
-            vertex.push_back((i+1) / (float)rez); // u
-            vertex.push_back((j+1) / (float)rez); // v
-        }
-    }
-
-    // register VAO
-    unsigned int terrainVAO, terrainVBO;
-    glGenVertexArrays(1, &terrainVAO);
-    glBindVertexArray(terrainVAO);
-
-    glGenBuffers(1, &terrainVBO);
-    glBindBuffer(GL_ARRAY_BUFFER, terrainVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * vertex.size(), &vertex[0], GL_STATIC_DRAW);
-
-    // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
+    glGenVertexArrays(1, &quadVAO);
+    glGenBuffers(1, &quadVBO);
+    glBindVertexArray(quadVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
-    // texCoord attribute
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(sizeof(float) * 3));
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
 
-    glPatchParameteri(GL_PATCH_VERTICES, 4);
+    // Build & Compile Shaders
+    // Shader shader("../shader.vert", "../shader.frag");
+    Shader screenQuad("../shader.vert", "../shader.frag");
+    ComputeShader computeShader("../shader.comp");
+
+    // Compute Perlin Texture
+    const unsigned int TEXTURE_WIDTH = 512, TEXTURE_HEIGHT = 512;
+    unsigned int perlinTexture;
+
+    glGenTextures(1, &perlinTexture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, perlinTexture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, TEXTURE_WIDTH, TEXTURE_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
+
+    // This might has some problem
+    glBindImageTexture(0, perlinTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+
     glEnable(GL_DEPTH_TEST);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-    // [TODO]:
-    // > Work on LOD & git push
     // RENDER LOOP
     while(!glfwWindowShouldClose(window)){
         // Delta Time
@@ -215,19 +176,32 @@ int main(){
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // view/projection transformation
-        glm::mat4 projection=glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH/(float)SCR_HEIGHT, 0.1f, 1000.0f);
+        glm::mat4 projection=glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH/(float)SCR_HEIGHT, 0.1f, 100.0f);
         glm::mat4 view=camera.GetViewMatrix();
         glm::mat4 model = glm::mat4(1.0f);
-        model = glm::scale(model, glm::vec3(0.05f));
 
-        tessHeightMapShader.use();
-        tessHeightMapShader.setMat4("projection", projection);
-        tessHeightMapShader.setMat4("view", view);
-        tessHeightMapShader.setMat4("model", model);
+        // shader.use();
+        // shader.setMat4("projection", projection);
+        // shader.setMat4("view", view);
+        // shader.setMat4("model", model);
+        
+        // Execute Compute Shader
+        computeShader.use();
+        glDispatchCompute((unsigned int)TEXTURE_WIDTH, (unsigned int)TEXTURE_HEIGHT, 1);
 
-        // Terrain Mesh
-        glBindVertexArray(terrainVAO);
-        glDrawArrays(GL_PATCHES, 0, 4*rez*rez); // 4 * 20 * 20
+        // make sure writing to image has finished before using it
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+        // Render Compute Image to Quad
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        screenQuad.use();
+        screenQuad.setInt("tex", 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, perlinTexture);
+
+        glBindVertexArray(quadVAO);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glBindVertexArray(0);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
