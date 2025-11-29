@@ -20,18 +20,23 @@
 #include "../../include/shader.h"
 #include "../../include/camera.h"
 
+// Function Prototypes
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow* window);
 
+void Sphere(int sectorCount, int stackCount, unsigned int &vao, 
+        unsigned int &vbo, unsigned int &ebo, int &indexCount);
+
 // GLOBAL VARIABLES
 // Screen Settings
 const unsigned int SCR_WIDTH=1280;
 const unsigned int SCR_HEIGHT=800;
+const float PI=3.1415926;
 
 // Camera
-Camera camera(glm::vec3(0.0f, 30.0f, 3.0f)); // arg: cameraPos
+Camera camera(glm::vec3(0.0f, 0.0f, 3.0f)); // arg: cameraPos
 float lastX=SCR_WIDTH/2.0f; 
 float lastY=SCR_HEIGHT/2.0f;
 float firstMouse=true;
@@ -137,6 +142,7 @@ int main(){
     }
 
     // VAO && VBO
+    //----------Circle VAO----------
     unsigned int circleVAO, circleVBO;
     glGenVertexArrays(1, &circleVAO);
     glGenBuffers(1, &circleVBO);
@@ -147,6 +153,13 @@ int main(){
 
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+
+    //----------Sphere VAO----------
+    unsigned int sphereVAO, sphereVBO, sphereEBO;
+    int sphereIndexCount;
+
+    Sphere(100, 120, sphereVAO, sphereVBO, sphereEBO, sphereIndexCount);
+
 
     //----------QUAD VAO----------
     unsigned int quadVAO, quadVBO;
@@ -169,7 +182,7 @@ int main(){
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
 
     // Build & Compile Shaders
-    Shader circleShader("../shader.vert", "../shader.frag");
+    Shader shader("../shader.vert", "../shader.frag");
 
     // Compute Perlin Texture
     const unsigned int TEXTURE_WIDTH = 512, TEXTURE_HEIGHT = 512;
@@ -191,7 +204,7 @@ int main(){
     glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
     glLineWidth(2.0f);
 
-    // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
     // RENDER LOOP
     while(!glfwWindowShouldClose(window)){
@@ -206,22 +219,26 @@ int main(){
         // glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // view/projection transformation
-        // glm::mat4 projection=glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH/(float)SCR_HEIGHT, 0.1f, 100.0f);
         float aspect = (float)SCR_WIDTH / (float)SCR_HEIGHT;
-        glm::mat4 projection = glm::ortho(-aspect, aspect, -1.0f, 1.0f);
-        // glm::mat4 view=camera.GetViewMatrix();
-        glm::mat4 view= glm::mat4(1.0f);
+        // view/projection transformation
+        glm::mat4 projection=glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH/(float)SCR_HEIGHT, 0.1f, 100.0f);
+        // glm::mat4 projection = glm::ortho(-aspect, aspect, -1.0f, 1.0f);
+        glm::mat4 view=camera.GetViewMatrix();
         glm::mat4 model = glm::mat4(1.0f);
 
-        circleShader.use();
-        circleShader.setMat4("model", model);
-        circleShader.setMat4("view", view);
-        circleShader.setMat4("projection", projection);
+        shader.use();
+        shader.setMat4("model", model);
+        shader.setMat4("view", view);
+        shader.setMat4("projection", projection);
 
-        glBindVertexArray(circleVAO);
-        glDrawArrays(GL_LINE_LOOP, 0, segments+1);
-        glBindVertexArray(0);
+        // glBindVertexArray(circleVAO);
+        // glDrawArrays(GL_LINE_LOOP, 0, segments+1);
+        // glBindVertexArray(0);
+
+        glPointSize(2.0f);
+        glBindVertexArray(sphereVAO);
+        // glDrawElements(GL_TRIANGLES, sphereIndexCount, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_POINTS, sphereIndexCount, GL_UNSIGNED_INT, 0);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -229,6 +246,129 @@ int main(){
 
     glfwTerminate();
     return 0;
+}
+
+void Sphere(int sectorCount, int stackCount, unsigned int &vao, 
+        unsigned int &vbo, unsigned int &ebo, int &sphereIndexCount)
+{
+    // Equation of a sphere at the origin: 
+    // x^2 + y^2 + z^2 = r^2
+
+    // Terminologies
+    // Sectors(θ) -> Longitude (Horizontal Slice)
+    // Stacks(ϕ) -> Latitude (Vertical Slice)
+
+    // Range of angles
+    // Sector => 0 to 360 deg
+    // Stack => 90 (top) to -90 (bottom) deg (total 180 deg)
+
+    // ϕ -> 2*pi * sectorStep/sectorCount
+    // θ -> pi/2 - pi * stackStep/stackCount
+
+    // Arrays
+    std::vector<float> vertexData;
+
+    // Variables
+    float radius = 1.0f;
+    float x, y, z, xy;                           // vertex positon
+    float nx, ny, nz, lengthInv = 1.0f / radius; // vertex normal
+    float s, t;                                  // vertex texCoord
+
+    float sectorStep = 2 * PI / sectorCount;   // 0 → 360   degrees
+    float stackStep  = PI / stackCount;        // +90 → -90 degrees
+
+    float sectorAngle, stackAngle;
+
+    // Stack Loop (|)
+    for(int i=0; i<=stackCount; ++i){
+        stackAngle = PI / 2 - i * stackStep; // starting from pi/2 to -pi/2
+        xy = radius * cos(stackAngle); // r * cos(u)
+        z = radius * sin(stackAngle); // r * sin(u)
+
+        // add (sectorCount+1) vertices per stack
+        // first and last vertices have same position and normal, but different tex coords
+        // Sector Loop (--)
+        for(int j=0; j<=sectorCount; ++j){
+            sectorAngle = j*sectorStep; // starting from 0 to 2pi
+
+            // vertex position (x, y, z)
+            x = xy * cosf(sectorAngle); // r * cos(u) * cos(v)
+            y = xy * sinf(sectorAngle); // r * cos(u) * sin(v)
+            vertexData.push_back(x);
+            vertexData.push_back(y);
+            vertexData.push_back(z);
+
+            // normalized vertex normal (nx, ny, nz)
+            nx = x * lengthInv;
+            ny = y * lengthInv;
+            nz = z * lengthInv;
+            vertexData.push_back(nx);
+            vertexData.push_back(ny);
+            vertexData.push_back(nz);
+
+            // vertex tex coord (s, t) range between [0, 1]
+            s = (float)j / sectorCount;
+            t = (float)i / stackCount;
+            vertexData.push_back(s);
+            vertexData.push_back(t);
+        }
+    }
+
+    // generate CCW index list of sphere triangles
+    // k1--k1+1
+    // |  / |
+    // | /  |
+    // k2--k2+1
+
+    std::vector<unsigned int> indices;
+    int k1, k2;
+
+    for(int i = 0; i < stackCount; i++) {
+        k1 = i * (sectorCount + 1);
+        k2 = k1 + sectorCount + 1;
+
+        for(int j = 0; j < sectorCount; j++, k1++, k2++) {
+            if(i != 0) {
+                indices.push_back(k1);
+                indices.push_back(k2);
+                indices.push_back(k1 + 1);
+            }
+
+            if(i != (stackCount - 1)) {
+                indices.push_back(k1 + 1);
+                indices.push_back(k2);
+                indices.push_back(k2 + 1);
+            }
+        }
+    }
+
+    sphereIndexCount = indices.size();
+
+    // VAO/VBO/EBO
+    glGenVertexArrays(1, &vao);
+    glGenBuffers(1, &vbo);
+    glGenBuffers(1, &ebo);
+
+    glBindVertexArray(vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, vertexData.size() * sizeof(float), vertexData.data(), GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+
+    GLsizei stride = 8 * sizeof(float);
+    // position (location = 0)
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, (void*)0);
+    // normal (location = 1)
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride, (void*)(3 * sizeof(float)));
+    // texcoord (location = 2)
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride, (void*)(6 * sizeof(float)));
+
+    glBindVertexArray(0);
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height){

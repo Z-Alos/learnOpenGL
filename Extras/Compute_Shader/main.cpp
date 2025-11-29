@@ -40,6 +40,7 @@ float firstMouse=true;
 // Timing
 float deltaTime=0.0f;
 float lastFrame=0.0f;
+int fCounter = 0;
 
 // Lighting
 glm::vec3 lightPos(1.2f, 0.0f, 2.0f);
@@ -59,6 +60,8 @@ int main(){
     }
 
     glfwMakeContextCurrent(window);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSwapInterval(0);
 
     // MOUSE
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -69,9 +72,7 @@ int main(){
         std::cout << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
-
     glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
     // Vertices
     float vertices[] = {
@@ -139,25 +140,23 @@ int main(){
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
 
     // Build & Compile Shaders
-    // Shader shader("../shader.vert", "../shader.frag");
     Shader screenQuad("../shader.vert", "../shader.frag");
     ComputeShader computeShader("../shader.comp");
 
     // Compute Perlin Texture
     const unsigned int TEXTURE_WIDTH = 512, TEXTURE_HEIGHT = 512;
-    unsigned int perlinTexture;
+    unsigned int texture;
 
-    glGenTextures(1, &perlinTexture);
+    glGenTextures(1, &texture);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, perlinTexture);
+    glBindTexture(GL_TEXTURE_2D, texture);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, TEXTURE_WIDTH, TEXTURE_HEIGHT, 0, GL_RGBA, GL_FLOAT, NULL);
 
-    // This might has some problem
-    glBindImageTexture(0, perlinTexture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(0, texture, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
 
     glEnable(GL_DEPTH_TEST);
     // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -168,6 +167,13 @@ int main(){
         float currentFrame=glfwGetTime();
         deltaTime=currentFrame-lastFrame;
         lastFrame=currentFrame;
+
+        if(fCounter > 50) {
+            std::cout << "FPS: " << 1 / deltaTime << std::endl;
+            fCounter = 0;
+        } else {
+            fCounter++;
+        }	
 
         processInput(window);
 
@@ -180,24 +186,20 @@ int main(){
         glm::mat4 view=camera.GetViewMatrix();
         glm::mat4 model = glm::mat4(1.0f);
 
-        // shader.use();
-        // shader.setMat4("projection", projection);
-        // shader.setMat4("view", view);
-        // shader.setMat4("model", model);
-        
         // Execute Compute Shader
         computeShader.use();
-        glDispatchCompute((unsigned int)TEXTURE_WIDTH, (unsigned int)TEXTURE_HEIGHT, 1);
+        computeShader.setFloat("t", currentFrame);
+        glDispatchCompute((unsigned int)TEXTURE_WIDTH/10, (unsigned int)TEXTURE_HEIGHT/10, 1);
 
         // make sure writing to image has finished before using it
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
         // Render Compute Image to Quad
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        // glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         screenQuad.use();
         screenQuad.setInt("tex", 0);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, perlinTexture);
+        glBindTexture(GL_TEXTURE_2D, texture);
 
         glBindVertexArray(quadVAO);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
